@@ -40,10 +40,11 @@ func main() {
 		<-sigChan
 		log.Println("Получен сигнал завершения, завершаем работу")
 		cancel()
-		wg.Wait()
 	}()
 
 	<-ctx.Done()
+
+	wg.Wait()
 
 	fmt.Println("Файл сохранен.")
 }
@@ -72,7 +73,25 @@ func writeToFile(ctx context.Context, inputChan <-chan string, writer io.Writer,
 func readInput(ctx context.Context, inputChan chan<- string, reader io.Reader, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	scanner := bufio.NewScanner(reader)
+	bufReader := bufio.NewReader(reader)
+	inputChanInternal := make(chan string)
+
+	go func() {
+		defer close(inputChanInternal)
+		for {
+			if !isTesting {
+				fmt.Print("Введите текст: ")
+			}
+			line, err := bufReader.ReadString('\n')
+			if err != nil {
+				if err != io.EOF {
+					log.Println("Ошибка чтения ввода:", err)
+				}
+				return
+			}
+			inputChanInternal <- line[:len(line)-1] // убираем символ новой строки
+		}
+	}()
 
 	for {
 		select {
@@ -80,24 +99,12 @@ func readInput(ctx context.Context, inputChan chan<- string, reader io.Reader, w
 			log.Println("Завершаем чтение ввода")
 			close(inputChan)
 			return
-		default:
-			if !isTesting {
-				fmt.Print("Введите текст: ")
-			}
-			if scanner.Scan() {
-				select {
-				case inputChan <- scanner.Text():
-				default:
-					return
-				}
-			} else {
-				if err := scanner.Err(); err != nil {
-					log.Println("Ошибка чтения ввода:", err)
-				}
+		case line, ok := <-inputChanInternal:
+			if !ok {
 				close(inputChan)
-
 				return
 			}
+			inputChan <- line
 		}
 	}
 }
