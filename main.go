@@ -36,13 +36,10 @@ func main() {
 	wg.Add(1)
 	go writeToFile(ctx, inputChan, file, &wg)
 
-	go func() {
-		<-sigChan
-		log.Println("Получен сигнал завершения, завершаем работу")
-		cancel()
-	}()
 
-	<-ctx.Done()
+	<-sigChan
+	log.Println("Получен сигнал завершения, завершаем работу")
+	cancel()
 
 	wg.Wait()
 
